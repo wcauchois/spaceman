@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ImplicitParams #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Quadtree(
   Quadtree, Bounds, Point,
