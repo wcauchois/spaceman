@@ -2,4 +2,5 @@
 import Quadtree
 
 main :: IO ()
-main = putStrLn "Hello world!"
+main = return () -- TODO: webserver here lol
+
