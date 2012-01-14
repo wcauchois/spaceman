@@ -6,7 +6,6 @@ module Quadtree(
 ) where
 
 import Control.Monad
-import Control.Monad.Reader
 
 type Point = (Double, Double)
 type Bounds = (Point   -- X, Y
