@@ -1,6 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ImplicitParams #-}
 
-module Spaceman where
+module Quadtree(
+  Quadtree, Bounds, Point,
+  insert, retreiveArea, fromBounds
+) where
 
 import Control.Monad
 import Control.Monad.Reader
@@ -28,6 +31,9 @@ intersect :: Bounds -> Bounds -> Bounds
 
 empty :: Bounds -> Bool
 empty (_, (width, height)) = width == 0 && height == 0
+
+fromBounds :: Bounds -> Quadtree a
+fromBounds = (`Leaf` [])
 
 subdivide :: Quadtree a -> Quadtree a
 subdivide (Leaf bounds@((x, y), (width, height)) entries) =
