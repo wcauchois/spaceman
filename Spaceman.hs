@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ImplicitParams #-}
 
 module Spaceman where
 
@@ -15,15 +15,6 @@ data Quadtree a = Node Bounds (Quadtree a   -- Top left
                               , Quadtree a) -- Bottom right
                 | Leaf Bounds [(Point, a)]
 
-data Config = Config {
-  maximumCapacity :: Int
-}
-
-newtype Q a = Q { runQ :: Reader Config a } deriving (Monad, MonadReader Config)
-
-config :: (Config -> a) -> Q a
-config = asks
-
 inside :: Point -> Bounds -> Bool
 (x', y') `inside` ((x, y), (width, height)) =
   x' > x && x' < x + width && y' > y && y' < y + height
@@ -37,13 +28,12 @@ intersect :: Bounds -> Bounds -> Bounds
 
 empty :: Bounds -> Bool
 empty (_, (width, height)) = width == 0 && height == 0
-                           
 
 subdivide :: Quadtree a -> Quadtree a
 subdivide (Leaf bounds@((x, y), (width, height)) entries) =
   let halfWidth = width / 2; halfHeight = height / 2
       [topLeftBounds, topRightBounds, bottomLeftBounds, bottomRightBounds] =
-        map (\offset -> ((x+fst offset, y+snd offset), (halfWidth, halfHeight))) $
+        map (\(ofsX, ofsY) -> ((x + ofsX, y + ofsY), (halfWidth, halfHeight))) $
           zip (concat $ map (replicate 2) [0, halfWidth]) (cycle [0, halfHeight])
   in Node bounds (constructLeaf topLeftBounds
                  , constructLeaf topRightBounds
@@ -52,19 +42,17 @@ subdivide (Leaf bounds@((x, y), (width, height)) entries) =
   where constructLeaf bounds =
           Leaf bounds $ filter ((`inside` bounds) . fst) entries
 
-insert :: Quadtree a -> (Point, a) -> Q (Quadtree a)
-insert leaf@(Leaf bounds entries) entry@(k, v) =
-  do capacity <- config maximumCapacity
-     if length entries + 1 > capacity
-       then insert (subdivide leaf) entry
-       else return (Leaf bounds $ entry : entries)
+insert :: (?maximumCapacity :: Int) => Quadtree a -> (Point, a) -> Quadtree a
+insert leaf@(Leaf bounds entries) entry@(k, v)
+  | length entries + 1 > ?maximumCapacity = insert (subdivide leaf) entry
+  | otherwise = Leaf bounds $ entry : entries
 
-retreiveArea :: Quadtree a -> Bounds -> Q [(Point, a)]
+retreiveArea :: Quadtree a -> Bounds -> [(Point, a)]
 retreiveArea (Leaf bounds entries) area =
   let intersection = area `intersect` bounds
-  in return $ filter ((`inside` intersection) . fst) entries
+  in filter ((`inside` intersection) . fst) entries
 retreiveArea (Node bounds (topLeft, topRight, bottomLeft, bottomRight)) area
-  | empty (area `intersect` bounds) = return []
+  | empty (area `intersect` bounds) = []
   | otherwise = let children = [topLeft, topRight, bottomLeft, bottomRight]
-                in liftM concat $ mapM (`retreiveArea` area) children
+                in concat $ map (`retreiveArea` area) children
 
