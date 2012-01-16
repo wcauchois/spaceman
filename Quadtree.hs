@@ -1,12 +1,13 @@
 {-# LANGUAGE ImplicitParams #-}
 
 module Quadtree(
-  Quadtree, Bounds, Point,
+  Quadtree, Bounds, Point, Capacity,
   insert, retreiveArea, fromBounds
 ) where
 
 import Control.Monad
 
+type Capacity = Int
 type Point = (Double, Double)
 type Bounds = (Point   -- X, Y
               , Point) -- Width, Height
@@ -47,7 +48,7 @@ subdivide (Leaf bounds@((x, y), (width, height)) entries) =
   where constructLeaf bounds =
           Leaf bounds $ filter ((`inside` bounds) . fst) entries
 
-insert :: (?maximumCapacity :: Int) => Quadtree a -> (Point, a) -> Quadtree a
+insert :: (?maximumCapacity :: Capacity) => Quadtree a -> (Point, a) -> Quadtree a
 insert leaf@(Leaf bounds entries) entry@(k, v)
   | length entries + 1 > ?maximumCapacity = insert (subdivide leaf) entry
   | otherwise = Leaf bounds $ entry : entries
