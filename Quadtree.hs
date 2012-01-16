@@ -2,21 +2,33 @@
 
 module Quadtree(
   Quadtree, Bounds, Point, Capacity,
-  insert, retreiveArea, fromBounds
+  insert, delete, retreiveArea, fromBounds
 ) where
 
 import Control.Monad
+import Data.HashSet(HashSet)
+import qualified Data.HashSet as HS
+import Data.Hashable
 
 type Capacity = Int
 type Point = (Double, Double)
 type Bounds = (Point   -- X, Y
               , Point) -- Width, Height
 
-data Quadtree a = Node Bounds (Quadtree a   -- Top left
-                              , Quadtree a  -- Top right
-                              , Quadtree a  -- Bottom left
-                              , Quadtree a) -- Bottom right
-                | Leaf Bounds [(Point, a)]
+data (Hashable a, Eq a) => Quadtree a =
+  Node (HashSet a) Bounds (Quadtree a   -- Top left
+                          , Quadtree a  -- Top right
+                          , Quadtree a  -- Bottom left
+                          , Quadtree a) -- Bottom right
+  | Leaf Bounds [(Point, a)]
+
+bounds :: Quadtree a -> Bounds
+bounds (Node _ bounds _) = bounds
+bounds (Leaf bounds _) = bounds
+
+children :: Quadtree a -> [Quadtree a]
+children (Node _ _ (topLeft, topRight, bottomLeft, bottomRight)) =
+  [topLeft, topRight, bottomLeft, bottomRight]
 
 inside :: Point -> Bounds -> Bool
 (x', y') `inside` ((x, y), (width, height)) =
@@ -41,24 +53,41 @@ subdivide (Leaf bounds@((x, y), (width, height)) entries) =
       [topLeftBounds, topRightBounds, bottomLeftBounds, bottomRightBounds] =
         map (\(ofsX, ofsY) -> ((x + ofsX, y + ofsY), (halfWidth, halfHeight))) $
           zip (concat $ map (replicate 2) [0, halfWidth]) (cycle [0, halfHeight])
-  in Node bounds (constructLeaf topLeftBounds
-                 , constructLeaf topRightBounds
-                 , constructLeaf bottomLeftBounds
-                 , constructLeaf bottomRightBounds)
+  in Node (HS.fromList $ map snd entries) bounds (constructLeaf topLeftBounds
+                                                 , constructLeaf topRightBounds
+                                                 , constructLeaf bottomLeftBounds
+                                                 , constructLeaf bottomRightBounds)
   where constructLeaf bounds =
           Leaf bounds $ filter ((`inside` bounds) . fst) entries
 
-insert :: (?maximumCapacity :: Capacity) => Quadtree a -> (Point, a) -> Quadtree a
-insert leaf@(Leaf bounds entries) entry@(k, v)
+insert :: (?maximumCapacity :: Capacity) => (Point, a) -> Quadtree a -> Maybe (Quadtree a)
+insert (Node set bounds (topLeft, topRight, bottomLeft, bottomRight)) entry@(point, label)
+  | not (point `inside` bounds) = Nothing
+  | otherwise = Just $ Node (HS.insert label set) bounds $
+                  let tryInsert child = fromMaybe child (insert child entry)
+                  in (tryInsert topLeft
+                     , tryInsert topRight
+                     , tryInsert bottomLeft
+                     , tryInsert bottomRight)
+insert (Leaf bounds entries) entry
+  | not (point `inside` bounds) = Nothing
   | length entries + 1 > ?maximumCapacity = insert (subdivide leaf) entry
   | otherwise = Leaf bounds $ entry : entries
 
-retreiveArea :: Quadtree a -> Bounds -> [(Point, a)]
-retreiveArea (Leaf bounds entries) area =
+delete :: a -> Quadtree a -> Quadtree a
+delete label node@(Node set bounds (topLeft, topRight, bottomLeft, bottomRight))
+  | label `HS.member` set = Node (HS.delete label set) bounds (delete label topLeft,
+                                                               delete label topRight,
+                                                               delete label bottomLeft,
+                                                               delete label bottomRight)
+  | otherwise = node
+delete label (Leaf bounds entries) = Leaf bounds $ filter ((/=label) . snd) entries
+
+retreiveArea :: Bounds -> Quadtree a -> [(Point, a)]
+retreiveArea area (Leaf bounds entries) =
   let intersection = area `intersect` bounds
   in filter ((`inside` intersection) . fst) entries
-retreiveArea (Node bounds (topLeft, topRight, bottomLeft, bottomRight)) area
+retreiveArea area node@(Node bounds _)
   | empty (area `intersect` bounds) = []
-  | otherwise = let children = [topLeft, topRight, bottomLeft, bottomRight]
-                in concat $ map (`retreiveArea` area) children
+  | otherwise = concat $ map (`retreiveArea` area) $ children node
 
