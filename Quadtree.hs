@@ -31,10 +31,6 @@ data Quadtree a =
   | Leaf Bounds [(Point, a)]
   deriving (Show) -- XXX
 
-bounds :: Quadtree a -> Bounds
-bounds (Node _ bounds _) = bounds
-bounds (Leaf bounds _) = bounds
-
 children :: Quadtree a -> [Quadtree a]
 children (Node _ _ (topLeft, topRight, bottomLeft, bottomRight)) =
   [topLeft, topRight, bottomLeft, bottomRight]
@@ -120,5 +116,5 @@ retrieveArea area (Leaf bounds entries) =
   in filter ((`inside` intersection) . fst) entries
 retrieveArea area node@(Node _ bounds _)
   | empty (area `intersect` bounds) = []
-  | otherwise = concat $ map (retrieveArea area) $ children node
+  | otherwise = concatMap (retrieveArea area) $ children node
 
