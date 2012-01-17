@@ -2,25 +2,34 @@
 
 module Quadtree(
   Quadtree, Bounds, Point, Capacity,
-  insert, delete, retreiveArea, fromBounds
+  insert, delete, retrieveArea, fromBounds,
+  
+  insertSimple, inside, bounds, children, subdivide, intersect, empty -- XXX
 ) where
 
 import Control.Monad
-import Data.HashSet(HashSet)
-import qualified Data.HashSet as HS
-import Data.Hashable
+import Control.Monad.State
+import Data.Maybe
+import Data.Set(Set)
+import qualified Data.Set as Set
+import Data.Decimal
+import Data.List((\\))
+import Debug.Trace -- XXX
+
+insertSimple m entry q = let ?maximumCapacity = m in insert entry q
 
 type Capacity = Int
-type Point = (Double, Double)
+type Point = (Decimal, Decimal)
 type Bounds = (Point   -- X, Y
               , Point) -- Width, Height
 
-data (Hashable a, Eq a) => Quadtree a =
-  Node (HashSet a) Bounds (Quadtree a   -- Top left
-                          , Quadtree a  -- Top right
-                          , Quadtree a  -- Bottom left
-                          , Quadtree a) -- Bottom right
+data Quadtree a =
+    Node (Set a) Bounds (Quadtree a   -- Top left
+                      , Quadtree a  -- Top right
+                      , Quadtree a  -- Bottom left
+                      , Quadtree a) -- Bottom right
   | Leaf Bounds [(Point, a)]
+  deriving (Show) -- XXX
 
 bounds :: Quadtree a -> Bounds
 bounds (Node _ bounds _) = bounds
@@ -32,7 +41,7 @@ children (Node _ _ (topLeft, topRight, bottomLeft, bottomRight)) =
 
 inside :: Point -> Bounds -> Bool
 (x', y') `inside` ((x, y), (width, height)) =
-  x' > x && x' < x + width && y' > y && y' < y + height
+  x' >= x && x' <= x + width && y' >= y && y' <= y + height
 
 intersect :: Bounds -> Bounds -> Bounds
 ((x, y), (width, height)) `intersect` ((x', y'), (width', height')) =
@@ -47,47 +56,65 @@ empty (_, (width, height)) = width == 0 && height == 0
 fromBounds :: Bounds -> Quadtree a
 fromBounds = (`Leaf` [])
 
-subdivide :: Quadtree a -> Quadtree a
+subdivide :: (Ord a) => Quadtree a -> Quadtree a
 subdivide (Leaf bounds@((x, y), (width, height)) entries) =
-  let halfWidth = width / 2; halfHeight = height / 2
-      [topLeftBounds, topRightBounds, bottomLeftBounds, bottomRightBounds] =
-        map (\(ofsX, ofsY) -> ((x + ofsX, y + ofsY), (halfWidth, halfHeight))) $
-          zip (concat $ map (replicate 2) [0, halfWidth]) (cycle [0, halfHeight])
-  in Node (HS.fromList $ map snd entries) bounds (constructLeaf topLeftBounds
-                                                 , constructLeaf topRightBounds
-                                                 , constructLeaf bottomLeftBounds
-                                                 , constructLeaf bottomRightBounds)
-  where constructLeaf bounds =
-          Leaf bounds $ filter ((`inside` bounds) . fst) entries
+  Node (Set.fromList $ map snd entries) bounds children
+  where portions = concatMap (uncurry replicate)
+        widths = portions (width `divide` 2)
+        heights = portions (height `divide` 2)
+        -- TODO: turn this into an elegant map or fold or whatevers
+        topLeftBounds = ((x + 0, y + 0), (widths !! 0, heights !! 0))
+        topRightBounds = ((x + widths !! 0, y + 0), (widths !! 1, heights !! 0))
+        bottomLeftBounds = ((x + 0, y + heights !! 0), (widths !! 0, heights !! 1))
+        bottomRightBounds = ((x + widths !! 0, y + heights !! 0), (widths !! 1, heights !! 1))
+        (children, []) = (`runState` entries) $
+          do topLeftEntries     <- popEntries topLeftBounds
+             topRightEntries    <- popEntries topRightBounds
+             bottomLeftEntries  <- popEntries bottomLeftBounds
+             bottomRightEntries <- popEntries bottomRightBounds
+             return (Leaf topLeftBounds topLeftEntries
+                    , Leaf topRightBounds topRightEntries
+                    , Leaf bottomLeftBounds bottomLeftEntries
+                    , Leaf bottomRightBounds bottomRightEntries)
+        popEntries bounds = do entries <- get
+                               let entries' = filter ((`inside` bounds) . fst) entries
+                               put (entries \\ entries')
+                               return entries'
 
-insert :: (?maximumCapacity :: Capacity) => (Point, a) -> Quadtree a -> Maybe (Quadtree a)
-insert (Node set bounds (topLeft, topRight, bottomLeft, bottomRight)) entry@(point, label)
+insert :: (?maximumCapacity :: Capacity, Ord a)
+       => (Point, a) -> Quadtree a -> Maybe (Quadtree a)
+insert entry@(point, label) (Node set bounds (topLeft, topRight, bottomLeft, bottomRight))
   | not (point `inside` bounds) = Nothing
-  | otherwise = Just $ Node (HS.insert label set) bounds $
-                  let tryInsert child = fromMaybe child (insert child entry)
-                  in (tryInsert topLeft
-                     , tryInsert topRight
-                     , tryInsert bottomLeft
-                     , tryInsert bottomRight)
-insert (Leaf bounds entries) entry
+  | otherwise = Just $ Node (Set.insert label set) bounds $ (`evalState` False) $
+                  do let tryInsert child = get >>= \done ->
+                           case (done, insert entry child) of
+                             (True, _)            -> return child
+                             (False, Nothing)     -> return child
+                             (False, Just child') -> put True >> return child'
+                     topLeft'     <- tryInsert topLeft
+                     topRight'    <- tryInsert topRight
+                     bottomLeft'  <- tryInsert bottomLeft
+                     bottomRight' <- tryInsert bottomRight
+                     return (topLeft', topRight', bottomLeft', bottomRight')
+insert entry@(point, label) leaf@(Leaf bounds entries)
   | not (point `inside` bounds) = Nothing
-  | length entries + 1 > ?maximumCapacity = insert (subdivide leaf) entry
-  | otherwise = Leaf bounds $ entry : entries
+  | length entries + 1 > ?maximumCapacity = insert entry (subdivide leaf)
+  | otherwise = Just $ Leaf bounds $ entry : entries
 
-delete :: a -> Quadtree a -> Quadtree a
+delete :: (Ord a) => a -> Quadtree a -> Quadtree a
 delete label node@(Node set bounds (topLeft, topRight, bottomLeft, bottomRight))
-  | label `HS.member` set = Node (HS.delete label set) bounds (delete label topLeft,
-                                                               delete label topRight,
-                                                               delete label bottomLeft,
-                                                               delete label bottomRight)
+  | label `Set.member` set = Node (Set.delete label set) bounds (delete label topLeft,
+                                                                 delete label topRight,
+                                                                 delete label bottomLeft,
+                                                                 delete label bottomRight)
   | otherwise = node
 delete label (Leaf bounds entries) = Leaf bounds $ filter ((/=label) . snd) entries
 
-retreiveArea :: Bounds -> Quadtree a -> [(Point, a)]
-retreiveArea area (Leaf bounds entries) =
+retrieveArea :: Bounds -> Quadtree a -> [(Point, a)]
+retrieveArea area (Leaf bounds entries) =
   let intersection = area `intersect` bounds
   in filter ((`inside` intersection) . fst) entries
-retreiveArea area node@(Node bounds _)
+retrieveArea area node@(Node _ bounds _)
   | empty (area `intersect` bounds) = []
-  | otherwise = concat $ map (`retreiveArea` area) $ children node
+  | otherwise = concat $ map (retrieveArea area) $ children node
 
