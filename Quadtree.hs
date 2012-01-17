@@ -4,7 +4,7 @@ module Quadtree(
   Quadtree, Bounds, Point, Capacity,
   insert, delete, retrieveArea, fromBounds,
   
-  insertSimple, inside, bounds, children, subdivide, intersect, empty -- XXX
+  insertSimple, inside, children, subdivide, intersect, empty -- XXX
 ) where
 
 import Control.Monad
