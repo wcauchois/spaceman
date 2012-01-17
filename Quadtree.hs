@@ -25,9 +25,9 @@ type Bounds = (Point   -- X, Y
 
 data Quadtree a =
     Node (Set a) Bounds (Quadtree a   -- Top left
-                      , Quadtree a  -- Top right
-                      , Quadtree a  -- Bottom left
-                      , Quadtree a) -- Bottom right
+                        , Quadtree a  -- Top right
+                        , Quadtree a  -- Bottom left
+                        , Quadtree a) -- Bottom right
   | Leaf Bounds [(Point, a)]
   deriving (Show) -- XXX
 
