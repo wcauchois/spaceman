@@ -13,7 +13,7 @@ import Data.Maybe
 import Data.Set(Set)
 import qualified Data.Set as Set
 import Data.Decimal
-import Data.List((\\))
+import Data.List((\\), zip4)
 import Debug.Trace -- XXX
 
 insertSimple m entry q = let ?maximumCapacity = m in insert entry q
@@ -56,17 +56,21 @@ empty (_, (width, height)) = width == 0 && height == 0
 fromBounds :: Bounds -> Quadtree a
 fromBounds = (`Leaf` [])
 
+uncurry4 f (a, b, c, d) = f a b c d
+
 subdivide :: (Ord a) => Quadtree a -> Quadtree a
 subdivide (Leaf bounds@((x, y), (width, height)) entries) =
   Node (Set.fromList $ map snd entries) bounds children
   where portions = concatMap (uncurry replicate)
-        widths = portions (width `divide` 2)
-        heights = portions (height `divide` 2)
-        -- TODO: turn this into an elegant map or fold or whatevers
-        topLeftBounds = ((x + 0, y + 0), (widths !! 0, heights !! 0))
-        topRightBounds = ((x + widths !! 0, y + 0), (widths !! 1, heights !! 0))
-        bottomLeftBounds = ((x + 0, y + heights !! 0), (widths !! 0, heights !! 1))
-        bottomRightBounds = ((x + widths !! 0, y + heights !! 0), (widths !! 1, heights !! 1))
+        doublify = concatMap (replicate 2)
+        widths@[leftWidth, _] = portions (width `divide` 2)
+        heights@[leftHeight, _] = portions (height `divide` 2)
+        [topLeftBounds, topRightBounds, bottomLeftBounds, bottomRightBounds] =
+          map (\(ofsX, ofsY, width, height) -> ((x + ofsX, y + ofsY), (width, height))) $
+            uncurry4 zip4 (cycle [0, leftWidth]
+                          , doublify [0, leftHeight]
+                          , cycle widths
+                          , doublify heights)
         (children, []) = (`runState` entries) $
           do topLeftEntries     <- popEntries topLeftBounds
              topRightEntries    <- popEntries topRightBounds
