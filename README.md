@@ -1,6 +1,8 @@
 Spaceman
 ========
 
+![Spaceman](https://github.com/wcauchois/spaceman/raw/master/logo.png)
+
 Spaceman (short for "space manager") is a dead-simple in-memory spatial cache.
 
 Protocol
