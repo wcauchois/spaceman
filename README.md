@@ -14,7 +14,7 @@ _label_
 
 > Associate _label_ with the point at (_x_, _y_). The result will either be **OK** or **ERROR** _string_.
 
-**RETREIVE {**_x_**,**
+**RETRIEVE {**_x_**,**
 _y_**,**
 _width_**,**
 _height_**}**
