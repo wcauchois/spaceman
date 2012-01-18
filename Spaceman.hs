@@ -7,6 +7,8 @@ import Text.ParserCombinators.Parsec
 import Control.Monad
 import Data.Char(toLower, toUpper)
 import Data.List(intercalate)
+import Control.Concurrent.MVar
+import Data.Maybe(fromJust)
 
 import Control.Concurrent
 import Control.Exception
@@ -25,7 +27,7 @@ class Server s where
 
   worker :: s -> Request s -> IO (Response s)
 
-newtype Service = Service ()
+newtype Service = Service (MVar (Quadtree Label))
 
 type Label = String
 
@@ -82,7 +84,14 @@ instance Server Service where
   fromResponse _ (Table entries) = B.pack $ intercalate "\n" $ map showEntry entries
     where showEntry ((x, y), l) = intercalate "\t" [show x, show y, l]
   
-  worker s _ = return Ok
+  worker (Service quadtree) (Put point label) =
+    do let ?maximumCapacity = 5
+       modifyMVar_ quadtree (return . fromJust . insert (point, label))
+       return Ok
+  worker (Service quadtree) (Retrieve area) =
+    liftM (Table . retrieveArea area) $ readMVar quadtree
+  worker (Service quadtree) (Delete label) = return $ Error "unimplemented"
+  worker _ Unrecognized = return $ Error "unrecognized command"
 
 server :: Server s => s -> Int -> IO ()
 server srv port =
@@ -98,5 +107,6 @@ server srv port =
                       B.hPutStrLn h (fromResponse srv res)
 
 main :: IO ()
-main = server (Service ()) 8000
+main = do quadtree <- newMVar (fromBounds ((0, 0), (100, 100)))
+          server (Service quadtree) 8000
 
