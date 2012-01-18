@@ -86,11 +86,13 @@ instance Server Service where
   
   worker (Service quadtree) (Put point label) =
     do let ?maximumCapacity = 5
-       modifyMVar_ quadtree (return . fromJust . insert (point, label))
+       modifyMVar_ quadtree $ return . fromJust . insert (point, label)
        return Ok
   worker (Service quadtree) (Retrieve area) =
     liftM (Table . retrieveArea area) $ readMVar quadtree
-  worker (Service quadtree) (Delete label) = return $ Error "unimplemented"
+  worker (Service quadtree) (Delete label) =
+    do modifyMVar_ quadtree $ return . delete label
+       return Ok
   worker _ Unrecognized = return $ Error "unrecognized command"
 
 server :: Server s => s -> Int -> IO ()
