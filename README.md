@@ -20,3 +20,5 @@ Protocol
 **DELETE label**
 
 > Delete an entry by its label. The result will either be "OK" or "ERROR \<message\>".
+
+![Spaceman session](https://raw.github.com/wcauchois/wcauchois.github.io/master/spaceman.png)
