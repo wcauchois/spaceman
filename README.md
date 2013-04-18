@@ -10,7 +10,7 @@ Protocol
 
 **PUT (x, y, label)**
 
-> Associate label with the point at (x, y). The result with either be "OK" or "ERROR <message>".
+> Associate label with the point at (x, y). The result with either be "OK" or "ERROR \<message\>".
 
 **RETRIEVE {x, y, width, height}**
 
@@ -19,4 +19,4 @@ Protocol
 
 **DELETE label**
 
-> Delete an entry by its label. The result will either be "OK" or "ERROR <message>".
+> Delete an entry by its label. The result will either be "OK" or "ERROR \<message\>".
